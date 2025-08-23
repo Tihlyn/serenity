@@ -1,6 +1,7 @@
-# FF14 Discord Bot
+# Cappuccino
 
 A Discord bot designed for Final Fantasy XIV communities, featuring event management, PvP calculations, and utility functions.
+Half assed by April Macchiato@Saggitarius
 
 ## Features
 
