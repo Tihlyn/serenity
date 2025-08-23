@@ -106,7 +106,7 @@ function validateDateTime(dateTimeString) {
 function createEventEmbed(eventType, eventDate, organizer, description = '', participants = []) {
   const embed = new EmbedBuilder()
     .setTitle(`📅 ${EVENT_TYPES.find(t => t.value === eventType)?.name || eventType}`)
-    .setColor(0x0099FF)
+    .setColor(0x49bbbb)
     .addFields(
       { name: '🗓️ Date & Time', value: `<t:${Math.floor(eventDate.getTime() / 1000)}:F>`, inline: true },
       { name: '⏰ Relative Time', value: `<t:${Math.floor(eventDate.getTime() / 1000)}:R>`, inline: true },
@@ -331,7 +331,7 @@ async function handleButtonInteraction(interaction) {
             { name: '🗓️ Date & Time', value: `<t:${Math.floor(event.date.getTime() / 1000)}:F>` },
             { name: '⏰ Relative Time', value: `<t:${Math.floor(event.date.getTime() / 1000)}:R>` }
           )
-          .setColor(0x00FF00)
+          .setColor(0x49bbbb)
           .setTimestamp()]
       });
     } catch (error) {
