@@ -827,7 +827,10 @@ const commands = [
         .setDescription('Purge all events (debug)'),
 ];
 
-// Bot events
+// OK so this section about upload and config loading is old and deprecated. it was from another function from a personal project
+// but I left it in because I might want to add more functionality later
+// and it might be useful for reference.
+// It does not affect current bot functionality. 
 client.once('ready', async () => {
     log(`Logged in as ${client.user.tag}`);
     
