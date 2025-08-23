@@ -210,14 +210,6 @@ Roll dice with animation:
 - `scheduleReminders()` - Sets up automated reminder jobs
 - `createEventEmbed()` - Generates event display embeds
 
-### PvP System
-- `calculatePvPXP()` - Core calculation logic for Malmstone requirements
-- `handlePvPCalculator()` - Command handler with validation and formatting
-
-### Utility Functions
-- `rollDice()` - Animated dice rolling with visual effects
-- `validateDateTime()` - Ensures proper event scheduling format
-
 ### Data Management
 - `saveEventToRedis()` - Persists event data
 - `getEventFromRedis()` - Retrieves event information
