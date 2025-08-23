@@ -47,15 +47,114 @@ EVENT_CHANNEL_ID=channel_id_for_events
 
 I recommend running redis as a container for safety and ease of use
 
+## Option 1: Local Redis Installation
+
+### Windows (Using WSL2 - Recommended)
+
+1. **Install WSL2 if you haven't already:**
 ```bash
-# On Linux/Mac with Homebrew
+# Run in PowerShell as Administrator
+wsl --install
+```
+
+2. **Install Redis in WSL2:**
+```bash
+# Update packages
+sudo apt update
+
+# Install Redis
+sudo apt install redis-server
+
+# Start Redis service
+sudo service redis-server start
+
+# Test Redis is working
+redis-cli ping
+# Should return: PONG
+```
+
+3. **Make Redis start automatically:**
+```bash
+# Add to ~/.bashrc
+echo "sudo service redis-server start" >> ~/.bashrc
+```
+
+### macOS
+
+1. **Using Homebrew (Recommended):**
+```bash
+# Install Homebrew if you don't have it
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Install Redis
+brew install redis
+
+# Start Redis service
 brew services start redis
 
-# On Linux with systemd
-sudo systemctl start redis
+# Test Redis is working
+redis-cli ping
+# Should return: PONG
+```
 
-# Or run directly
-redis-server
+### Linux (Ubuntu/Debian)
+
+```bash
+# Update packages
+sudo apt update
+
+# Install Redis
+sudo apt install redis-server
+
+# Start and enable Redis service
+sudo systemctl start redis-server
+sudo systemctl enable redis-server
+
+# Test Redis is working
+redis-cli ping
+# Should return: PONG
+```
+
+## Option 2: Docker Redis (Cross-Platform)
+
+### Basic Docker Setup
+
+1. **Install Docker Desktop** from [docker.com](https://www.docker.com/products/docker-desktop/)
+
+2. **Run Redis container:**
+```bash
+# Run Redis in detached mode with persistence
+docker run --name redis-bullmq -p 6379:6379 -d redis:7-alpine redis-server --appendonly yes
+
+# Test connection
+docker exec -it redis-bullmq redis-cli ping
+# Should return: PONG
+```
+
+### Docker Compose (Recommended for Development)
+
+Create `docker-compose.yml`:
+
+```yaml
+version: '3.8'
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: redis-bullmq
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+```
+
+Start with:
+```bash
+docker-compose up -d
 ```
 
 4. Run the bot:
