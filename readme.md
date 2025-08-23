@@ -157,7 +157,7 @@ Start with:
 docker-compose up -d
 ```
 
-4. Run the bot:
+## 4. Run the bot:
 ```bash
 node bot.js
 ```
