@@ -41,6 +41,7 @@ npm install discord.js bullmq ioredis dotenv
 DISCORD_TOKEN=your_discord_bot_token
 CLIENT_ID=your_discord_application_id
 AUTHORIZED_USERS=user_id_1,user_id_2,user_id_3
+SERVER_ROLE_ID=server_role_id
 EVENT_CHANNEL_ID=channel_id_for_events
 ```
 
@@ -171,6 +172,7 @@ node bot.js
 | `CLIENT_ID` | Your Discord application ID |
 | `AUTHORIZED_USERS` | Comma-separated list of user IDs who can create events, list active events and purge them (debug) |
 | `EVENT_CHANNEL_ID` | Channel ID where events will be posted |
+| `SERVER_ROLE_ID` | in case you want to use server roles instead of specific userIDs to limit who can create events |
 
 ## Commands
 
