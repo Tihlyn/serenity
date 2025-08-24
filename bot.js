@@ -391,7 +391,7 @@ async function handleButtonInteraction(interaction) {
           .addFields(
             { name: '🗓️ Date & Time', value: `<t:${Math.floor(event.date.getTime() / 1000)}:F>` },
             { name: '⏰ Relative Time', value: `<t:${Math.floor(event.date.getTime() / 1000)}:R>` },
-            { name: '🛡️ Role', value: ROLE_LABELS[role], inline: true }
+            { name: 'Role', value: ROLE_LABELS[role], inline: true }
           )
           .setColor(0x49bbbb)
           .setTimestamp()]
