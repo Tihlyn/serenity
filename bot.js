@@ -103,6 +103,11 @@ function validateDateTime(dateTimeString) {
 }
 
 
+// Utility: role limits
+const ROLE_LIMITS = { tank: 2, healer: 2, dps: 4 };
+const ROLE_LABELS = { tank: 'Tank', healer: 'Healer', dps: 'DPS' };
+
+// Update: createEventEmbed to show roles
 function createEventEmbed(eventType, eventDate, organizer, description = '', participants = []) {
   const embed = new EmbedBuilder()
     .setTitle(`📅 ${EVENT_TYPES.find(t => t.value === eventType)?.name || eventType}`)
@@ -119,31 +124,60 @@ function createEventEmbed(eventType, eventDate, organizer, description = '', par
   }
 
   if (participants.length > 0) {
-    const participantList = participants.map(id => `<@${id}>`).join('\n');
+    // Show participants with roles
+    const roleGroups = { tank: [], healer: [], dps: [] };
+    for (const p of participants) {
+      if (roleGroups[p.role]) roleGroups[p.role].push(`<@${p.id}>`);
+    }
+    let participantList = '';
+    for (const role of ['tank', 'healer', 'dps']) {
+      if (roleGroups[role].length > 0) {
+        participantList += `**${ROLE_LABELS[role]}s:**\n${roleGroups[role].join('\n')}\n`;
+      }
+    }
     embed.addFields({ 
-      name: `👥 Participants (${participants.length})`, 
+      name: `👥 Participants (${participants.length}/8)`, 
       value: participantList.length > 1024 ? `${participantList.substring(0, 1020)}...` : participantList 
     });
   } else {
-    embed.addFields({ name: '👥 Participants (0)', value: 'No participants yet' });
+    embed.addFields({ name: '👥 Participants (0/8)', value: 'No participants yet' });
   }
 
   return embed;
 }
 
+// Add: role selection buttons
+function createRoleButtons(eventId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`role_tank_${eventId}`)
+      .setLabel('Tank')
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji('🛡️'),
+    new ButtonBuilder()
+      .setCustomId(`role_healer_${eventId}`)
+      .setLabel('Healer')
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji('💚'),
+    new ButtonBuilder()
+      .setCustomId(`role_dps_${eventId}`)
+      .setLabel('DPS')
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji('⚔️')
+  );
+}
 
-function createEventButtons(eventId, organizerId, currentUserId) {
+// Update: createEventButtons to show participant count
+function createEventButtons(eventId, organizerId, currentUserId, participants = []) {
   const row = new ActionRowBuilder();
-  
   row.addComponents(
     new ButtonBuilder()
       .setCustomId(`participate_${eventId}`)
-      .setLabel('Participate')
+      .setLabel(`Participate (${participants.length}/8)`)
       .setStyle(ButtonStyle.Primary)
       .setEmoji('✅')
+      .setDisabled(participants.length >= 8)
   );
-
-  // Only show delete button to the organizer
   if (currentUserId === organizerId) {
     row.addComponents(
       new ButtonBuilder()
@@ -153,7 +187,6 @@ function createEventButtons(eventId, organizerId, currentUserId) {
         .setEmoji('🗑️')
     );
   }
-
   return row;
 }
 
@@ -278,58 +311,87 @@ if (!channel) {
 }
 
 async function handleButtonInteraction(interaction) {
-  const [action, ...eventIdParts] = interaction.customId.split('_');
-  const eventId = eventIdParts.join('_');
-  const event = await getEventFromRedis(eventId);
-  if (event && event.date && !(event.date instanceof Date)) {
-    event.date = new Date(event.date);
+  const [action, ...rest] = interaction.customId.split('_');
+  let eventId, role;
+  if (action === 'role') {
+    role = rest[0];
+    eventId = rest.slice(1).join('_');
+  } else {
+    eventId = rest.join('_');
   }
-  console.log('eventId:', eventId, 'event:', event);
+  let event = await getEventFromRedis(eventId);
+  if (event && event.date && !(event.date instanceof Date)) event.date = new Date(event.date);
   if (!event) {
-    return interaction.reply({ 
-      content: '❌ Event not found.', 
-      ephemeral: true 
-    });
+    return interaction.reply({ content: '❌ Event not found.', ephemeral: true });
+  }
+  // Ensure participants is array of objects
+  if (!Array.isArray(event.participants)) event.participants = [];
+  if (event.participants.length > 0 && typeof event.participants[0] === 'string') {
+    // Migrate old format
+    event.participants = event.participants.map(id => ({ id, role: 'dps' }));
   }
 
+  // PARTICIPATE: prompt for role if not already participating
   if (action === 'participate') {
     const userId = interaction.user.id;
-
-    if (event.participants.includes(userId)) {
-      return interaction.reply({ 
-        content: '⚠️ You are already participating in this event!', 
-        ephemeral: true 
-      });
+    if (event.participants.some(p => p.id === userId)) {
+      return interaction.reply({ content: '⚠️ You are already participating in this event!', ephemeral: true });
     }
-
-    
-    event.participants.push(userId);
-    await saveEventToRedis(event);
-
-    
-    await scheduleReminders(eventId, event.date, [userId]);
-
-    
-    const embed = createEventEmbed(event.type, event.date, event.organizer, event.description, event.participants);
-    const buttons = createEventButtons(eventId, event.organizer, event.organizer);
-
-    await interaction.update({ 
-      embeds: [embed], 
-      components: [buttons] 
+    if (event.participants.length >= 8) {
+      return interaction.reply({ content: '❌ This event is full!', ephemeral: true });
+    }
+    // Prompt for role selection
+    return interaction.reply({
+      content: 'Please select your role:',
+      components: [createRoleButtons(eventId)],
+      ephemeral: true
     });
+  }
 
-    // Send confirmation DM
+  // ROLE SELECTION: add user with selected role
+  if (action === 'role') {
+    const userId = interaction.user.id;
+    if (!['tank', 'healer', 'dps'].includes(role)) {
+      return interaction.reply({ content: '❌ Invalid role.', ephemeral: true });
+    }
+    if (event.participants.some(p => p.id === userId)) {
+      return interaction.reply({ content: '⚠️ You are already participating in this event!', ephemeral: true });
+    }
+    if (event.participants.length >= 8) {
+      return interaction.reply({ content: '❌ This event is full!', ephemeral: true });
+    }
+    // Check role limit
+    const roleCount = event.participants.filter(p => p.role === role).length;
+    if (roleCount >= ROLE_LIMITS[role]) {
+      return interaction.reply({ content: `❌ All ${ROLE_LABELS[role]} slots are filled.`, ephemeral: true });
+    }
+    // Add participant
+    event.participants.push({ id: userId, role });
+    await saveEventToRedis(event);
+    await scheduleReminders(eventId, event.date, [userId]);
+    // Update event message
+    const channel = interaction.message?.channel || interaction.channel;
+    const embed = createEventEmbed(event.type, event.date, event.organizer, event.description, event.participants);
+    const buttons = createEventButtons(eventId, event.organizer, event.organizer, event.participants);
+    // Try to update the original event message
+    try {
+      if (event.messageId && channel) {
+        const msg = await channel.messages.fetch(event.messageId);
+        await msg.edit({ embeds: [embed], components: [buttons] });
+      }
+    } catch (e) {}
+    // Confirmation DM
     try {
       const user = await interaction.client.users.fetch(userId);
       const eventTypeName = EVENT_TYPES.find(t => t.value === event.type)?.name || event.type;
-      
       await user.send({
         embeds: [new EmbedBuilder()
           .setTitle('✅ Event Registration Confirmed')
           .setDescription(`You have successfully registered for: **${eventTypeName}**`)
           .addFields(
             { name: '🗓️ Date & Time', value: `<t:${Math.floor(event.date.getTime() / 1000)}:F>` },
-            { name: '⏰ Relative Time', value: `<t:${Math.floor(event.date.getTime() / 1000)}:R>` }
+            { name: '⏰ Relative Time', value: `<t:${Math.floor(event.date.getTime() / 1000)}:R>` },
+            { name: '🛡️ Role', value: ROLE_LABELS[role], inline: true }
           )
           .setColor(0x49bbbb)
           .setTimestamp()]
@@ -337,49 +399,38 @@ async function handleButtonInteraction(interaction) {
     } catch (error) {
       console.error('Could not send DM to user:', error);
     }
+    return interaction.update({ content: `You have joined as **${ROLE_LABELS[role]}**!`, components: [], ephemeral: true });
+  }
 
-  } else if (action === 'delete') {
-    // Only organizer can delete
+  // DELETE: notify all with role
+  if (action === 'delete') {
     if (interaction.user.id !== event.organizer) {
-      return interaction.reply({ 
-        content: '❌ Only the event organizer can delete this event.', 
-        ephemeral: true 
-      });
+      return interaction.reply({ content: '❌ Only the event organizer can delete this event.', ephemeral: true });
     }
-
-    // Cancel all reminders
     await cancelEventReminders(eventId);
-
     const eventTypeName = EVENT_TYPES.find(t => t.value === event.type)?.name || event.type;
-    for (const participantId of event.participants) {
-      if (participantId === event.organizer) continue;
+    for (const participant of event.participants) {
+      if (participant.id === event.organizer) continue;
       try {
-        const user = await interaction.client.users.fetch(participantId);
+        const user = await interaction.client.users.fetch(participant.id);
         await user.send({
           embeds: [new EmbedBuilder()
             .setTitle('❌ Event Cancelled')
             .setDescription(`The **${eventTypeName}** event you registered for has been cancelled by the organizer.`)
             .addFields(
-              { name: 'Originally Scheduled', value: `<t:${Math.floor(event.date.getTime() / 1000)}:F>` }
+              { name: 'Originally Scheduled', value: `<t:${Math.floor(event.date.getTime() / 1000)}:F>` },
+              { name: 'Your Role', value: ROLE_LABELS[participant.role], inline: true }
             )
             .setColor(0xFF0000)
             .setTimestamp()]
         });
       } catch (error) {
-        console.error(`Could not send cancellation DM to user ${participantId}:`, error);
+        console.error(`Could not send cancellation DM to user ${participant.id}:`, error);
       }
     }
-
-    // Remove from storage
     await deleteEventFromRedis(eventId);
-
-    // Delete the message
     await interaction.message.delete();
-
-    await interaction.reply({ 
-      content: '✅ Event deleted successfully.', 
-      ephemeral: true 
-    });
+    await interaction.reply({ content: '✅ Event deleted successfully.', ephemeral: true });
   }
 }
 
