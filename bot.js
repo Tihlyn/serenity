@@ -8,7 +8,8 @@ const path = require('path');
 
 // Configuration
 const AUTHORIZED_USERS = process.env.AUTHORIZED_USERS; 
-const EVENT_CHANNEL_ID = process.env.EVENT_CHANNEL_ID; 
+const EVENT_CHANNEL_ID = process.env.EVENT_CHANNEL_ID;
+const AUTHORIZED_ROLE_ID = process.env.SERVER_ROLE_ID; 
 //redis connection info & logging
 const redis = new Redis({
   host: 'localhost',
@@ -235,8 +236,8 @@ async function cancelEventReminders(eventId) {
 
 async function handleCreateEvent(interaction) {  
 // Ensure AUTHORIZED_USERS is a comma-separated string of IDs
-const authorizedIds = (process.env.AUTHORIZED_USERS || '').split(',').map(id => id.trim()).filter(Boolean);
-if (!authorizedIds.includes(interaction.user.id)) {
+const authorizedIds = (process.env.AUTHORIZED_ROLE_ID || '').split(',').map(id => id.trim()).filter(Boolean);
+if (!interaction.member.roles.cache.has(AUTHORIZED_ROLE_ID)) {
     return interaction.reply({ 
         content: '❌ You are not authorized to create events.', 
         ephemeral: true 
