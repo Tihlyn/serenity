@@ -104,9 +104,14 @@ function validateDateTime(dateTimeString) {
 }
 
 
-// Utility: role limits
+// Utility: role limits & emojis
 const ROLE_LIMITS = { tank: 2, healer: 2, dps: 4 };
 const ROLE_LABELS = { tank: 'Tank', healer: 'Healer', dps: 'DPS' };
+const ROLE_EMOJIS = {
+  tank: '<:TankRole:1409190029086953483>',    
+  healer: '<:HealerRole:1409190083692728501>',
+  dps: '<:DPSRole:1409190101128581191>',       
+};
 
 // Update: createEventEmbed to show roles
 function createEventEmbed(eventType, eventDate, organizer, description = '', participants = []) {
@@ -128,7 +133,10 @@ function createEventEmbed(eventType, eventDate, organizer, description = '', par
     // Show participants with roles
     const roleGroups = { tank: [], healer: [], dps: [] };
     for (const p of participants) {
-      if (roleGroups[p.role]) roleGroups[p.role].push(`<@${p.id}>`);
+      if (roleGroups[p.role]) {
+        // Add emoji before the mention
+        roleGroups[p.role].push(`${ROLE_EMOJIS[p.role] || ''} <@${p.id}>`);
+      }
     }
     let participantList = '';
     for (const role of ['tank', 'healer', 'dps']) {
@@ -154,17 +162,17 @@ function createRoleButtons(eventId) {
       .setCustomId(`role_tank_${eventId}`)
       .setLabel('Tank')
       .setStyle(ButtonStyle.Secondary)
-      .setEmoji('🛡️'),
+      .setEmoji({ id: '1409190029086953483', name: 'TankRole' }),
     new ButtonBuilder()
       .setCustomId(`role_healer_${eventId}`)
       .setLabel('Healer')
       .setStyle(ButtonStyle.Secondary)
-      .setEmoji('💚'),
+      .setEmoji({ id: '1409190083692728501', name: 'HealerRole' }),
     new ButtonBuilder()
       .setCustomId(`role_dps_${eventId}`)
       .setLabel('DPS')
       .setStyle(ButtonStyle.Secondary)
-      .setEmoji('⚔️')
+      .setEmoji({ id: '1409190101128581191', name: 'DPSRole' }),
   );
 }
 
