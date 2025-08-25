@@ -254,6 +254,22 @@ async function cancelEventReminders(eventId) {
   }
 }
 
+async function scheduleEventCleanup(eventId, eventDate) {
+  const eventTimestamp = eventDate.getTime();
+  const now = Date.now();
+  const delay = eventTimestamp - now + (5 * 60 * 1000); // 5 minutes after event ends
+
+  if (delay > 0) {
+    await reminderQueue.add(`cleanup_${eventId}`, { eventId }, {
+      delay,
+      removeOnComplete: true,
+      removeOnFail: true
+    });
+    log(`Scheduled cleanup for event ${eventId} in ${delay}ms`, 'DEBUG');
+  }
+}
+
+
 async function handleCreateEvent(interaction) {  
   // Ensure AUTHORIZED_USERS is a comma-separated string of IDs
   const authorizedIds = (process.env.AUTHORIZED_ROLE_ID || '').split(',').map(id => id.trim()).filter(Boolean);
@@ -315,6 +331,7 @@ async function handleCreateEvent(interaction) {
     // Update event data with message ID
     event.messageId = message.id;
     await saveEventToRedis(event);
+    await scheduleEventCleanup(eventId, eventDate);
     log(`Event ${eventId} saved to Redis`, 'DEBUG');
 
     await interaction.reply({ 
@@ -478,6 +495,29 @@ async function handleButtonInteraction(interaction) {
 const reminderWorker = new Worker('event-reminders', async (job) => {
   const { eventId, participantId, reminderType, eventDate } = job.data;
   
+
+  if (job.name.startsWith('cleanup_')) {
+  const { eventId } = job.data;
+  const event = await getEventFromRedis(eventId);
+  if (event) {
+    // Optionally delete the event message from Discord
+    try {
+      const channel = client.channels.cache.get(EVENT_CHANNEL_ID);
+      if (channel && event.messageId) {
+        const msg = await channel.messages.fetch(event.messageId);
+        await msg.delete();
+        log(`Event message deleted for event ${eventId} (auto-cleanup)`, 'DEBUG');
+      }
+    } catch (e) {
+      log(`Failed to delete event message for event ${eventId}: ${e.message}`, 'DEBUG');
+    }
+    await deleteEventFromRedis(eventId);
+    log(`Event ${eventId} auto-deleted after event time`, 'DEBUG');
+  }
+  return;
+}
+
+
   // Check if event still exists
   const event = await getEventFromRedis(eventId);
   if (!event) {
