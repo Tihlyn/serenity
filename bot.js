@@ -487,11 +487,11 @@ const reminderWorker = new Worker('event-reminders', async (job) => {
   }
 
   // Check if user is still a participant
-  if (!event.participants.includes(participantId)) {
+  if (!event.participants.some(p => p.id === participantId)) {
     console.log(`User ${participantId} no longer participating in ${eventId}, skipping reminder`);
     log(`User ${participantId} no longer participating in ${eventId}, skipping reminder`, 'DEBUG');
     return;
-  }
+}
 
   try {
     const user = await job.queue.client.users?.fetch?.(participantId);
