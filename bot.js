@@ -115,6 +115,10 @@ const ROLE_EMOJIS = {
 
 // Update: createEventEmbed to show roles
 function createEventEmbed(eventType, eventDate, organizer, description = '', participants = []) {
+  log(
+    `createEventEmbed called with eventType=${eventType}, eventDate=${eventDate.toISOString()}, organizer=${organizer}, descriptionLength=${description.length}, participantsCount=${participants.length}`,
+    'DEBUG'
+  );
   const embed = new EmbedBuilder()
     .setTitle(`📅 ${EVENT_TYPES.find(t => t.value === eventType)?.name || eventType}`)
     .setColor(0x49bbbb)
@@ -217,6 +221,11 @@ async function scheduleReminders(eventId, eventDate, participants) {
         const jobName = `reminder_${eventId}_${participant}_${reminder.label}`;
         const delay = reminderTime - now;
 
+        log(
+          `Scheduling reminder: jobName=${jobName}, eventId=${eventId}, participant=${participant}, reminderType=${reminder.label}, delay=${delay}ms`,
+          'DEBUG'
+        );
+
         await reminderQueue.add(jobName, {
           eventId,
           participantId: participant,
@@ -236,27 +245,29 @@ async function scheduleReminders(eventId, eventDate, participants) {
 async function cancelEventReminders(eventId) {
   const jobs = await reminderQueue.getJobs(['waiting', 'delayed']);
   const eventJobs = jobs.filter(job => job.data.eventId === eventId);
+
+  log(`Cancelling ${eventJobs.length} reminder jobs for event ${eventId}`, 'DEBUG');
   
   for (const job of eventJobs) {
     await job.remove();
+    log(`Removed reminder job ${job.id} for event ${eventId}`, 'DEBUG');
   }
 }
 
 async function handleCreateEvent(interaction) {  
-// Ensure AUTHORIZED_USERS is a comma-separated string of IDs
-const authorizedIds = (process.env.AUTHORIZED_ROLE_ID || '').split(',').map(id => id.trim()).filter(Boolean);
-if (!interaction.member.roles.cache.has(AUTHORIZED_ROLE_ID)) {
-    return interaction.reply({ 
-        content: '❌ You are not authorized to create events.', 
-        ephemeral: true 
-    });
-}
+  // Ensure AUTHORIZED_USERS is a comma-separated string of IDs
+  const authorizedIds = (process.env.AUTHORIZED_ROLE_ID || '').split(',').map(id => id.trim()).filter(Boolean);
+  if (!interaction.member.roles.cache.has(AUTHORIZED_ROLE_ID)) {
+      return interaction.reply({ 
+          content: '❌ You are not authorized to create events.', 
+          ephemeral: true 
+      });
+  }
 
   const eventType = interaction.options.getString('type');
   const dateTimeString = interaction.options.getString('datetime');
   const description = interaction.options.getString('description') || '';
 
-  
   const validation = validateDateTime(dateTimeString);
   if (!validation.valid) {
     return interaction.reply({ 
@@ -267,34 +278,33 @@ if (!interaction.member.roles.cache.has(AUTHORIZED_ROLE_ID)) {
 
   const eventId = `event_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   const eventDate = validation.date;
-  
+
   const event = {
-  id: eventId,
-  type: eventType,
-  date: eventDate,
-  organizer: interaction.user.id,
-  description,
-  participants: [],
-  messageId: null
-};
+    id: eventId,
+    type: eventType,
+    date: eventDate,
+    organizer: interaction.user.id,
+    description,
+    participants: [],
+    messageId: null
+  };
 
-
-  
   const embed = createEventEmbed(eventType, eventDate, interaction.user.id, description);
   const buttons = createEventButtons(eventId, interaction.user.id, interaction.user.id);
 
   const EVENT_CHANNEL_ID = (process.env.EVENT_CHANNEL_ID || '').trim();
-const channel = interaction.client.channels.cache.get(EVENT_CHANNEL_ID);
+  const channel = interaction.client.channels.cache.get(EVENT_CHANNEL_ID);
 
-if (!channel) {
-  // Debug log for troubleshooting
-  console.error('EVENT_CHANNEL_ID from .env:', EVENT_CHANNEL_ID);
-  console.error('Available channel IDs:', [...interaction.client.channels.cache.keys()]);
-  return interaction.reply({ 
-    content: `❌ Event channel not found. Bonk the dev. (ID: ${EVENT_CHANNEL_ID})`, 
-    ephemeral: true 
-  });
-}
+  if (!channel) {
+    // Debug log for troubleshooting
+    console.error('EVENT_CHANNEL_ID from .env:', EVENT_CHANNEL_ID);
+    console.error('Available channel IDs:', [...interaction.client.channels.cache.keys()]);
+    log(`Failed to find event channel with ID: ${EVENT_CHANNEL_ID}`, 'ERROR');
+    return interaction.reply({ 
+      content: `❌ Event channel not found. Bonk the dev. (ID: ${EVENT_CHANNEL_ID})`, 
+      ephemeral: true 
+    });
+  }
 
   try {
     const message = await channel.send({ 
@@ -305,13 +315,16 @@ if (!channel) {
     // Update event data with message ID
     event.messageId = message.id;
     await saveEventToRedis(event);
+    log(`Event ${eventId} saved to Redis`, 'DEBUG');
 
     await interaction.reply({ 
       content: `✅ Event created successfully! Check ${channel}`, 
       ephemeral: true 
     });
+    log(`Event ${eventId} created successfully by user ${interaction.user.id}`, 'DEBUG');
   } catch (error) {
     console.error('Error creating event:', error);
+    log(`Error creating event: ${error.message}`, 'ERROR');
     await interaction.reply({ 
       content: '❌ Failed to create event. Bonk April.', 
       ephemeral: true 
@@ -331,6 +344,7 @@ async function handleButtonInteraction(interaction) {
   let event = await getEventFromRedis(eventId);
   if (event && event.date && !(event.date instanceof Date)) event.date = new Date(event.date);
   if (!event) {
+    log(`Event not found for eventId=${eventId}`, 'DEBUG');
     return interaction.reply({ content: '❌ Event not found.', ephemeral: true });
   }
   // Ensure participants is array of objects
@@ -344,12 +358,15 @@ async function handleButtonInteraction(interaction) {
   if (action === 'participate') {
     const userId = interaction.user.id;
     if (event.participants.some(p => p.id === userId)) {
+      log(`User ${userId} already participating in event ${eventId}`, 'DEBUG');
       return interaction.reply({ content: '⚠️ You are already participating in this event!', ephemeral: true });
     }
     if (event.participants.length >= 8) {
+      log(`Event ${eventId} is full`, 'DEBUG');
       return interaction.reply({ content: '❌ This event is full!', ephemeral: true });
     }
     // Prompt for role selection
+    log(`Prompting user ${userId} for role selection in event ${eventId}`, 'DEBUG');
     return interaction.reply({
       content: 'Please select your role:',
       components: [createRoleButtons(eventId)],
@@ -361,23 +378,28 @@ async function handleButtonInteraction(interaction) {
   if (action === 'role') {
     const userId = interaction.user.id;
     if (!['tank', 'healer', 'dps'].includes(role)) {
+      log(`Invalid role "${role}" selected by user ${userId} for event ${eventId}`, 'DEBUG');
       return interaction.reply({ content: '❌ Invalid role.', ephemeral: true });
     }
     if (event.participants.some(p => p.id === userId)) {
+      log(`User ${userId} already participating in event ${eventId} (role selection)`, 'DEBUG');
       return interaction.reply({ content: '⚠️ You are already participating in this event!', ephemeral: true });
     }
     if (event.participants.length >= 8) {
+      log(`Event ${eventId} is full (role selection)`, 'DEBUG');
       return interaction.reply({ content: '❌ This event is full!', ephemeral: true });
     }
     // Check role limit
     const roleCount = event.participants.filter(p => p.role === role).length;
     if (roleCount >= ROLE_LIMITS[role]) {
+      log(`All ${ROLE_LABELS[role]} slots filled for event ${eventId}`, 'DEBUG');
       return interaction.reply({ content: `❌ All ${ROLE_LABELS[role]} slots are filled.`, ephemeral: true });
     }
     // Add participant
     event.participants.push({ id: userId, role });
     await saveEventToRedis(event);
     await scheduleReminders(eventId, event.date, [userId]);
+    log(`User ${userId} joined event ${eventId} as ${role}`, 'DEBUG');
     // Update event message
     const channel = interaction.message?.channel || interaction.channel;
     const embed = createEventEmbed(event.type, event.date, event.organizer, event.description, event.participants);
@@ -387,8 +409,11 @@ async function handleButtonInteraction(interaction) {
       if (event.messageId && channel) {
         const msg = await channel.messages.fetch(event.messageId);
         await msg.edit({ embeds: [embed], components: [buttons] });
+        log(`Event message updated for event ${eventId}`, 'DEBUG');
       }
-    } catch (e) {}
+    } catch (e) {
+      log(`Failed to update event message for event ${eventId}: ${e.message}`, 'DEBUG');
+    }
     // Confirmation DM
     try {
       const user = await interaction.client.users.fetch(userId);
@@ -405,8 +430,9 @@ async function handleButtonInteraction(interaction) {
           .setColor(0x49bbbb)
           .setTimestamp()]
       });
+      log(`Confirmation DM sent to user ${userId} for event ${eventId}`, 'DEBUG');
     } catch (error) {
-      console.error('Could not send DM to user:', error);
+      log(`Could not send DM to user ${userId}: ${error.message}`, 'DEBUG');
     }
     return interaction.update({ content: `You have joined as **${ROLE_LABELS[role]}**!`, components: [], ephemeral: true });
   }
@@ -414,9 +440,11 @@ async function handleButtonInteraction(interaction) {
   // DELETE: notify all with role
   if (action === 'delete') {
     if (interaction.user.id !== event.organizer) {
+      log(`User ${interaction.user.id} attempted to delete event ${eventId} but is not organizer`, 'DEBUG');
       return interaction.reply({ content: '❌ Only the event organizer can delete this event.', ephemeral: true });
     }
     await cancelEventReminders(eventId);
+    log(`Reminders cancelled for event ${eventId}`, 'DEBUG');
     const eventTypeName = EVENT_TYPES.find(t => t.value === event.type)?.name || event.type;
     for (const participant of event.participants) {
       if (participant.id === event.organizer) continue;
@@ -433,12 +461,15 @@ async function handleButtonInteraction(interaction) {
             .setColor(0xFF0000)
             .setTimestamp()]
         });
+        log(`Cancellation DM sent to user ${participant.id} for event ${eventId}`, 'DEBUG');
       } catch (error) {
-        console.error(`Could not send cancellation DM to user ${participant.id}:`, error);
+        log(`Could not send cancellation DM to user ${participant.id}: ${error.message}`, 'DEBUG');
       }
     }
     await deleteEventFromRedis(eventId);
+    log(`Event ${eventId} deleted from Redis`, 'DEBUG');
     await interaction.message.delete();
+    log(`Event message deleted for event ${eventId}`, 'DEBUG');
     await interaction.reply({ content: '✅ Event deleted successfully.', ephemeral: true });
   }
 }
@@ -451,12 +482,14 @@ const reminderWorker = new Worker('event-reminders', async (job) => {
   const event = await getEventFromRedis(eventId);
   if (!event) {
     console.log(`Event ${eventId} no longer exists, skipping reminder`);
+    log(`Event ${eventId} no longer exists, skipping reminder`, 'DEBUG');
     return;
   }
 
   // Check if user is still a participant
   if (!event.participants.includes(participantId)) {
     console.log(`User ${participantId} no longer participating in ${eventId}, skipping reminder`);
+    log(`User ${participantId} no longer participating in ${eventId}, skipping reminder`, 'DEBUG');
     return;
   }
 
@@ -464,6 +497,7 @@ const reminderWorker = new Worker('event-reminders', async (job) => {
     const user = await job.queue.client.users?.fetch?.(participantId);
     if (!user) {
       console.log(`Could not fetch user ${participantId} for reminder`);
+      log(`Could not fetch user ${participantId} for reminder`, 'DEBUG');
       return;
     }
 
@@ -485,15 +519,18 @@ const reminderWorker = new Worker('event-reminders', async (job) => {
 
     await user.send({ embeds: [embed] });
     console.log(`Sent ${reminderType} reminder to ${user.tag} for event ${eventId}`);
+    log(`Sent ${reminderType} reminder to ${user.tag} for event ${eventId}`, 'DEBUG');
     
   } catch (error) {
     console.error(`Failed to send reminder to ${participantId}:`, error);
+    log(`Failed to send reminder to ${participantId}: ${error.message}`, 'DEBUG');
   }
 }, { connection: redis });
 
 // Error handling for worker
 reminderWorker.on('failed', (job, err) => {
   console.error(`Reminder job ${job.id} failed:`, err);
+  log(`Reminder job ${job.id} failed: ${err.message}`, 'DEBUG');
 });
 
 
