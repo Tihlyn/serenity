@@ -494,7 +494,7 @@ const reminderWorker = new Worker('event-reminders', async (job) => {
 }
 
   try {
-    const user = await job.queue.client.users?.fetch?.(participantId);
+    const user = await client.users.fetch(participantId);
     if (!user) {
       console.log(`Could not fetch user ${participantId} for reminder`);
       log(`Could not fetch user ${participantId} for reminder`, 'DEBUG');
