@@ -58,6 +58,8 @@ const EVENT_TYPES = [
   { name: 'Blue Mage Skill Farm', value: 'blue_mage_skill_farm' },
   { name: 'Minion Farm', value: 'minion_farm' },
   { name: 'Treasure Trove Farm', value: 'treasure_trove_farm' },
+  { name: 'Deep Dungeon', value: 'deep_dungeon' },
+  { name: 'Other', value: 'other' }
 
 ];
 
@@ -105,12 +107,37 @@ function validateDateTime(dateTimeString) {
 
 
 // Utility: role limits & emojis
+const EMOJIS = {
+  blu: { id: '1411591723443814510', name: 'Blu', raw: '<:Blu:1411591723443814510>' },
+  occult: { id: '1411593082541047919', name: 'Occult', raw: '<:Occult:1411593082541047919>' },
+  raid: { id: '1411591738782515351', name: 'Raid', raw: '<:Raid:1411591738782515351>' },
+  mount: { id: '1411593193341845575', name: 'Mount', raw: '<:Mount:1411593193341845575>' },
+  moogle: { id: '1411593150060957757', name: 'Moogle', raw: '<:Moogle:1411593150060957757>' },
+  trial: { id: '1411591900686979144', name: 'Trial', raw: '<:Trial:1411591900686979144>' },
+  group: { id: '1411589775135215718', name: 'Player32_Icon', raw: '<:Player32_Icon:1411589775135215718>' },
+  maps: { id: '1411591835926790145', name: 'Maps', raw: '<:Maps:1411591835926790145>' },
+  deep: { id: '1411594249853472818', name: 'Deep', raw: '<:Deep:1411594249853472818>' },
+  minion: { id: '1411594326672412763', name: 'Minion', raw: '<:Minion:1411594326672412763>' },
+  other: { id: '1411601184518570057', name: 'Other', raw: '<:Other:1411601184518570057>' },
+  leader: { id: '1411602508723523645', name: 'Trove', raw: '<:Leader:1411602508723523645>' },
+  maps_event: { raw: '<:Maps:1411591835926790145>' },
+  extreme_trials_event: { raw: '<:Trial:1411591900686979144>' },
+  savage_raids_event: { raw: '<:Raid:1411591738782515351>' },
+  mount_farm_event: { raw: '<:Mount:1411593193341845575>' },
+  occult_crescent_event: { raw: '<:Occult:1411593082541047919>' },
+  blue_mage_skill_farm_event: { raw: '<:Blu:1411591723443814510>' },
+  minion_farm_event: { raw: '<:Minion:1411594326672412763>' },
+  treasure_trove_farm_event: { raw: '<:Moogle:1411593150060957757>' },
+  deep_dungeon_event: { raw: '<:Deep:1411594249853472818>' },
+  other_event: { raw: '<:Other:1411601184518570057>' },
+};
 const ROLE_LIMITS = { tank: 2, healer: 2, dps: 4 };
-const ROLE_LABELS = { tank: 'Tank', healer: 'Healer', dps: 'DPS' };
+const ROLE_LABELS = { tank: 'Tank', healer: 'Healer', dps: 'DPS', blue_mage: 'Blue Mage' };
 const ROLE_EMOJIS = {
   tank: '<:TankRole:1409190029086953483>',    
   healer: '<:HealerRole:1409190083692728501>',
-  dps: '<:DPSRole:1409190101128581191>',       
+  dps: '<:DPSRole:1409190101128581191>',
+  blue_mage: '<:BlueMage:1411608637130018847>'       
 };
 
 // Update: createEventEmbed to show roles
@@ -120,12 +147,12 @@ function createEventEmbed(eventType, eventDate, organizer, description = '', par
     'DEBUG'
   );
   const embed = new EmbedBuilder()
-    .setTitle(`📅 ${EVENT_TYPES.find(t => t.value === eventType)?.name || eventType}`)
+    .setTitle(`${EMOJIS[`${eventType}_event`]?.raw || '📅'} ${EVENT_TYPES.find(t => t.value === eventType)?.name || eventType}`)
     .setColor(0x49bbbb)
     .addFields(
       { name: '🗓️ Date & Time', value: `<t:${Math.floor(eventDate.getTime() / 1000)}:F>`, inline: true },
       { name: '⏰ Relative Time', value: `<t:${Math.floor(eventDate.getTime() / 1000)}:R>`, inline: true },
-      { name: '👤 Organizer', value: `<@${organizer}>`, inline: true }
+      { name: `${EMOJIS.leader.raw} Organizer`, value: `<@${organizer}>`, inline: true }
     )
     .setTimestamp();
 
@@ -135,7 +162,7 @@ function createEventEmbed(eventType, eventDate, organizer, description = '', par
 
   if (participants.length > 0) {
     // Show participants with roles
-    const roleGroups = { tank: [], healer: [], dps: [] };
+    const roleGroups = { tank: [], healer: [], dps: [], blue_mage: [] };
     for (const p of participants) {
       if (roleGroups[p.role]) {
         // Add emoji before the mention
@@ -143,17 +170,17 @@ function createEventEmbed(eventType, eventDate, organizer, description = '', par
       }
     }
     let participantList = '';
-    for (const role of ['tank', 'healer', 'dps']) {
+    for (const role of ['tank', 'healer', 'dps', 'blue_mage']) {
       if (roleGroups[role].length > 0) {
         participantList += `**${ROLE_LABELS[role]}s:**\n${roleGroups[role].join('\n')}\n`;
       }
     }
     embed.addFields({ 
-      name: `👥 Participants (${participants.length}/8)`, 
+      name: `${EMOJIS.group.raw} Participants (${participants.length}/8)`, 
       value: participantList.length > 1024 ? `${participantList.substring(0, 1020)}...` : participantList 
     });
   } else {
-    embed.addFields({ name: '👥 Participants (0/8)', value: 'No participants yet' });
+    embed.addFields({ name: `${EMOJIS.group.raw} Participants (0/8)`, value: 'No participants yet' });
   }
 
   return embed;
@@ -177,6 +204,11 @@ function createRoleButtons(eventId) {
       .setLabel('DPS')
       .setStyle(ButtonStyle.Secondary)
       .setEmoji({ id: '1409190101128581191', name: 'DPSRole' }),
+    new ButtonBuilder()
+      .setCustomId(`role_blue_mage_${eventId}`)
+      .setLabel('Blue Mage')
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji({ id: '1411608637130018847', name: 'BlueMage' })
   );
 }
 
